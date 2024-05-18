@@ -1,0 +1,126 @@
+use std::str::FromStr;
+use crate::ast::{Expr, Opcode, Constant, Sentence, Ident, ListCstr, ListNext};
+use crate::VAR_TABLE;
+
+grammar;
+
+match {
+    r"\s*" => {},
+    _
+}
+
+pub Stmt : Sentence = {
+    <Stmt_inside> ";;",
+};
+
+Stmt_inside : Sentence = {
+    Expr => Sentence::Assignment(Ident::Null, <>),
+    "let" <id : Id> "=" <expr : Expr> => Sentence::Assignment(Ident::Name(id.to_string()), expr),
+};
+
+Id : String = {
+    r"[_a-zA-Z][_a-zA-Z0-9]*" => <>.to_string(),
+};
+
+Constant : Constant = {
+    r"`[^`]*`" => Constant::Term(<>.to_string()),
+    r"[-]?[0-9]+" => Constant::IntConst(i32::from_str(<>).unwrap()),
+    r"'[^']*'" => Constant::StrConst(<>.to_string()),
+    "true" => Constant::BoolConst(true),
+    "false" => Constant::BoolConst(false),
+    "[" "]" => Constant::List(Vec::new()),
+    "[" <lc : List_Constructor> "]" => {
+        let mut res : Vec<Constant> = Vec::new();
+        let mut iter = lc;
+        while true {
+            res.push(iter.inside);
+            if let ListNext::Cont(next) = iter.next {
+                iter = next;
+            }
+            else {
+                break;
+            }
+        }
+        Constant::List(res.clone())
+    },
+};
+
+List_Constructor : Box<ListCstr>= {
+    Term => Box::new(ListCstr{
+        inside : <>.calculate(),
+        next : ListNext::Null,
+    }),
+    <term : Term> "," <lc : List_Constructor> => Box::new(ListCstr {
+        inside : term.calculate(),
+        next : ListNext::Cont(lc),
+    }),
+}
+
+Term : Box<Expr> = {
+    <id : Id> => {
+        let mut cnt = 0;
+        unsafe {
+            while cnt < VAR_TABLE.len() {
+                if VAR_TABLE[cnt].name == id {
+                    break;
+                }
+                cnt = cnt + 1;
+            }
+            if cnt == VAR_TABLE.len() {
+                panic!("No variable named {} is found.", id);
+            }
+            Box::new(Expr::Const(VAR_TABLE[cnt].value.clone()))
+        }
+    },
+    Constant => Box::new(Expr::Const(<>)),
+    "(" <expr : Expr> ")" => expr,
+};
+
+Primitive : Box<Expr> = {
+    "REFL" <r : Term> => Box::new(Expr::Op(Box::new(Expr::Null), Opcode::REFL, r)),
+    "TRANS" <l : Term> <r : Term> => Box::new(Expr::Op(l, Opcode::TRANS, r)),
+    "MK_COMB" <l : Term> <r : Term> => Box::new(Expr::Op(l, Opcode::MK_COMB, r)),
+    "ABS" <l : Term> <r : Term> => Box::new(Expr::Op(l, Opcode::ABS, r)),
+    "BETA" <r : Term> => Box::new(Expr::Op(Box::new(Expr::Null), Opcode::BETA, r)),
+    "ASSUME" <r : Term> => Box::new(Expr::Op(Box::new(Expr::Null), Opcode::ASSUME, r)),
+    "EQ_MP" <l : Term> <r : Term> => Box::new(Expr::Op(l, Opcode::EQ_MP, r)),
+    "DEDUCT_ANTYSYM_RULE" <l : Term> <r : Term> => Box::new(Expr::Op(l, Opcode::DEDUCT_ANTYSYM_RULE, r)),
+    "INST_TYPE" <l : Term> <r : Term> => Box::new(Expr::Op(l, Opcode::INST_TYPE, r)),
+    "INST" <l : Term> <r : Term> => Box::new(Expr::Op(l, Opcode::INST, r)),
+};
+
+Expr : Box<Expr> = {
+    #[precedence(level = "0")]
+    Primitive,
+
+    #[precedence(level = "1")] 
+    Term,
+
+    #[precedence(level = "2")] #[assoc(side = "left")]
+    <l : Expr> "*" <r : Expr> => Box::new(Expr::Op(l, Opcode::MUL, r)),
+    <l : Expr> "/" <r : Expr> => Box::new(Expr::Op(l, Opcode::DIV, r)),
+
+    #[precedence(level = "3")] #[assoc(side = "left")]
+    <l : Expr> "+" <r : Expr> => Box::new(Expr::Op(l, Opcode::ADD, r)),
+    <l : Expr> "-" <r : Expr> => Box::new(Expr::Op(l, Opcode::SUB, r)),
+
+    #[precedence(level = "4")] #[assoc(side = "left")]
+    <l : Expr> "^" <r : Expr> => Box::new(Expr::Op(l, Opcode::CAT, r)),
+
+    #[precedence(level = "5")] #[assoc(side = "left")]
+    <l : Expr> ">" <r : Expr> => Box::new(Expr::Op(l, Opcode::GREATER, r)),
+    <l : Expr> "<" <r : Expr> => Box::new(Expr::Op(l, Opcode::LESS, r)),
+    <l : Expr> "==" <r : Expr> => Box::new(Expr::Op(l, Opcode::EQ, r)),
+    <l : Expr> "!=" <r : Expr> => Box::new(Expr::Op(l, Opcode::UNEQ, r)),
+    <l : Expr> "<=" <r : Expr> => Box::new(Expr::Op(l, Opcode::LEQ, r)),
+    <l : Expr> ">=" <r : Expr> => Box::new(Expr::Op(l, Opcode::GEQ, r)),
+
+    #[precedence(level = "6")]
+    "!" <r : Expr> => Box::new(Expr::Op(Box::new(Expr::Null), Opcode::NOT, r)),
+
+    #[precedence(level = "7")] #[assoc(side = "left")]
+    <l : Expr> "&&" <r : Expr> => Box::new(Expr::Op(l, Opcode::AND, r)),
+
+    #[precedence(level = "8")] #[assoc(side = "left")]
+    <l : Expr> "||" <r : Expr> => Box::new(Expr::Op(l, Opcode::OR, r)),
+};
