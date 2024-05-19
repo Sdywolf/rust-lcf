@@ -1,6 +1,6 @@
 use std::str::FromStr;
-use crate::ast::{Expr, Opcode, Constant, Sentence, Ident};
-use crate::VAR_TABLE;
+use crate::utils::ast::{Expr, Opcode, Constant, Sentence, Ident};
+use crate::utils::parser::VAR_TABLE;
 
 grammar;
 
