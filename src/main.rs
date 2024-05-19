@@ -1,4 +1,5 @@
 use std::io;
+mod kernel;
 mod utils;
 use utils::parser::get_token;
 use utils::ast::{Sentence, Var, Ident};
