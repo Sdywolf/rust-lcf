@@ -4,34 +4,19 @@ pub enum Constant {
     StrConst(String),
     BoolConst(bool),
     Term(String),
-    List(Vec<Constant>),
 }
 
 impl Constant {
     pub fn print(&self) {
+        print!("var it : ");
         match &self {
-            Constant::IntConst(val) => { println!("var it : int = {}", val); },
-            Constant::StrConst(val) => { println!("var it : string = {}", val); },
-            Constant::BoolConst(val) => { println!("var it : bool = {}", val); },
-            Constant::Term(val) => { println!("var it : term = {}", val);},
-            Constant::List(list) => { 
-                println!("Print the list below, length = {}", list.len());
-                for cons in list {
-                    cons.print();
-                }
-            },
+            Constant::IntConst(val) => { println!("int = {}", val); },
+            Constant::StrConst(val) => { println!("string = {}", val); },
+            Constant::BoolConst(val) => { println!("bool = {}", val); },
+            Constant::Term(val) => { println!("term = {}", val);}
         };
     }
-}
 
-pub struct ListCstr {
-    pub inside : Constant,
-    pub next : ListNext,
-}
-
-pub enum ListNext {
-    Null,
-    Cont(Box<ListCstr>),
 }
 
 pub enum Expr {
@@ -250,19 +235,7 @@ impl Var {
             Constant::IntConst(val) => { println!("int = {}", val); },
             Constant::StrConst(val) => { println!("string = {}", val); },
             Constant::BoolConst(val) => { println!("bool = {}", val); },
-            Constant::Term(val) => {println!("term = {}", val); },
-            Constant::List(list) => { 
-                println!("List, length = {}", list.len());
-                for cons in list {
-                    cons.print();
-                }
-            },
+            Constant::Term(val) => {println!("term = {}", val); }
         };
     }
 }
-
-// pub struct Func {
-//     pub name : String,
-//     pub arg : Vec<String>,
-//     pub expr : String,
-// }
