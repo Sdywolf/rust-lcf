@@ -1,5 +1,5 @@
 use std::str::FromStr;
-use crate::ast::{Expr, Opcode, Constant, Sentence, Ident, ListCstr, ListNext};
+use crate::ast::{Expr, Opcode, Constant, Sentence, Ident};
 use crate::VAR_TABLE;
 
 grammar;
@@ -28,33 +28,7 @@ Constant : Constant = {
     r"'[^']*'" => Constant::StrConst(<>.to_string()),
     "true" => Constant::BoolConst(true),
     "false" => Constant::BoolConst(false),
-    "[" "]" => Constant::List(Vec::new()),
-    "[" <lc : List_Constructor> "]" => {
-        let mut res : Vec<Constant> = Vec::new();
-        let mut iter = lc;
-        while true {
-            res.push(iter.inside);
-            if let ListNext::Cont(next) = iter.next {
-                iter = next;
-            }
-            else {
-                break;
-            }
-        }
-        Constant::List(res.clone())
-    },
 };
-
-List_Constructor : Box<ListCstr>= {
-    Term => Box::new(ListCstr{
-        inside : <>.calculate(),
-        next : ListNext::Null,
-    }),
-    <term : Term> "," <lc : List_Constructor> => Box::new(ListCstr {
-        inside : term.calculate(),
-        next : ListNext::Cont(lc),
-    }),
-}
 
 Term : Box<Expr> = {
     <id : Id> => {
