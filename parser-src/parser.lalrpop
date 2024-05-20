@@ -1,0 +1,211 @@
+// This is parser-v2 for rust-lcf.
+
+use std::str::FromStr;
+use crate::ast::{Expr, Opcode, Constant, Sentence, Ident, ListCstr, ListNext, IdentList, IdentListNext, ArgList, ArgListNext, PrimArg, PrimNode, PrimLaw};
+
+grammar;
+
+match {
+    r"\s*" => {},
+    _
+}
+
+pub Stmt : Sentence = {
+    <Stmt_inside> ";;",
+};
+
+Stmt_inside : Sentence = {
+    Expr => Sentence::Assignment(Ident::Null, <>),
+    "let" <id : Id> "=" <expr : Expr> => Sentence::Assignment(Ident::Name(id.to_string()), expr),
+
+    "let" <func_id : Id> "(" <idlist : IdentListCstr> ")" "=" <body : Expr> => {
+        let mut argtable : Vec<String> = Vec::new();
+        let mut iter = idlist;
+        
+        loop {
+            argtable.push(iter.inside);
+            if let IdentListNext::Cont(nxt) = iter.next {
+                iter = nxt;
+            }
+            else {
+                break;
+            }
+        }
+        Sentence::FuncDef(func_id, argtable, body)
+    },
+
+    Primitive => Sentence::Primitive(Ident::Null, <>),
+    "let" <id : Id> "=" <prim : Primitive> => Sentence::Primitive(Ident::Name(id), prim),
+};
+
+IdentListCstr : Box<IdentList> = {
+    Id => Box::new(IdentList{
+        inside : <>,
+        next : IdentListNext::Null,
+    }),
+    <id : Id> "," <nxt : IdentListCstr> => Box::new(IdentList{
+        inside : id,
+        next : IdentListNext::Cont(nxt),
+    }),
+};
+
+Id : String = {
+    r"[_a-zA-Z][_a-zA-Z0-9]*" => <>.to_string(),
+};
+
+Constant : Constant = {
+    r"`[^`]*`" => Constant::Term(<>.to_string()),
+    r"[-]?[0-9]+" => Constant::IntConst(i32::from_str(<>).unwrap()),
+    r"'[^']*'" => Constant::StrConst(<>.to_string()),
+    "true" => Constant::BoolConst(true),
+    "false" => Constant::BoolConst(false),
+    "[" "]" => Constant::List(Vec::new()),
+    "[" <lc : List_Constructor> "]" => {
+        let mut res : Vec<Constant> = Vec::new();
+        let mut iter = lc;
+        loop {
+            res.push(iter.inside);
+            if let ListNext::Cont(next) = iter.next {
+                iter = next;
+            }
+            else {
+                break;
+            }
+        }
+        Constant::List(res.clone())
+    },
+};
+
+List_Constructor : Box<ListCstr>= {
+    Expr => Box::new(ListCstr{
+        inside : <>.calculate(&Vec::new()),
+        next : ListNext::Null,
+    }),
+    <expr : Expr> "," <lc : List_Constructor> => Box::new(ListCstr {
+        inside : expr.calculate(&Vec::new()),
+        next : ListNext::Cont(lc),
+    }),
+};
+
+Term : Box<Expr> = {
+    <id : Id> => Box::new(Expr::Id(id)),
+    Constant => Box::new(Expr::Const(<>)),
+    "(" <expr : Expr> ")" => expr,
+
+    <func_id : Id> "(" <args : ArgList> ")" => {
+        let mut res : Vec<Box<Expr> > = Vec::new();
+        let mut iter = args;
+        loop {
+            res.push(iter.inside);
+            if let ArgListNext::Cont(nxt) = iter.next {
+                iter = nxt;
+            }
+            else {
+                break;
+            }
+        }
+        Box::new(Expr::Func( func_id, res ))
+    },
+};
+
+ArgList : Box<ArgList> = {
+    Expr => Box::new(ArgList{ 
+        inside : <>, 
+        next : ArgListNext::Null,
+    }),
+    <expr : Expr> "," <arglist : ArgList> => Box::new(ArgList { 
+        inside : expr, 
+        next : ArgListNext::Cont(arglist),
+    }),
+};
+
+PrimArg : PrimArg = {
+    Id => PrimArg::Id(<>),
+    Constant => PrimArg::Term(<>),
+};
+
+Primitive : PrimNode = {
+    "REFL" <arg1 : PrimArg> => PrimNode{ 
+        law : PrimLaw::REFL, 
+        arg1, 
+        arg2 : PrimArg::Null,
+    },
+    "TRANS" <arg1 : PrimArg> <arg2 : PrimArg> => PrimNode{ 
+        law : PrimLaw::TRANS, 
+        arg1, 
+        arg2,
+    },
+    "MK_COMB" <arg1 : PrimArg> <arg2 : PrimArg> => PrimNode{ 
+        law : PrimLaw::MK_COMB, 
+        arg1, 
+        arg2, 
+    },
+    "ABS" <arg1 : PrimArg> <arg2 : PrimArg> => PrimNode{ 
+        law : PrimLaw::ABS, 
+        arg1,
+        arg2,
+    },
+    "BETA" <arg1 : PrimArg> => PrimNode{ 
+        law : PrimLaw::BETA, 
+        arg1, 
+        arg2 : PrimArg::Null,
+    },
+    "ASSUME" <arg1 : PrimArg> => PrimNode{ 
+        law : PrimLaw::ASSUME, 
+        arg1, 
+        arg2 : PrimArg::Null,
+    },
+    "EQ_MP" <arg1 : PrimArg> <arg2 : PrimArg> => PrimNode{ 
+        law : PrimLaw::EQ_MP, 
+        arg1, 
+        arg2,
+    },
+    "DEDUCT_ANTYSYM_RULE" <arg1 : PrimArg> <arg2 : PrimArg> => PrimNode{ 
+        law : PrimLaw::DEDUCT_ANTYSYM_RULE, 
+        arg1,
+        arg2,
+    },
+    "INST_TYPE" <arg1 : PrimArg> <arg2 : PrimArg> => PrimNode{ 
+        law : PrimLaw::INST_TYPE, 
+        arg1, 
+        arg2,
+    },
+    "INST" <arg1 : PrimArg> <arg2 : PrimArg> => PrimNode{ 
+        law : PrimLaw::INST, 
+        arg1, 
+        arg2,
+    },
+};
+
+Expr : Box<Expr> = {
+    #[precedence(level = "1")] 
+    Term,
+
+    #[precedence(level = "2")] #[assoc(side = "left")]
+    <l : Expr> "*" <r : Expr> => Box::new(Expr::Op(l, Opcode::MUL, r)),
+    <l : Expr> "/" <r : Expr> => Box::new(Expr::Op(l, Opcode::DIV, r)),
+
+    #[precedence(level = "3")] #[assoc(side = "left")]
+    <l : Expr> "+" <r : Expr> => Box::new(Expr::Op(l, Opcode::ADD, r)),
+    <l : Expr> "-" <r : Expr> => Box::new(Expr::Op(l, Opcode::SUB, r)),
+
+    #[precedence(level = "4")] #[assoc(side = "left")]
+    <l : Expr> "^" <r : Expr> => Box::new(Expr::Op(l, Opcode::CAT, r)),
+
+    #[precedence(level = "5")] #[assoc(side = "left")]
+    <l : Expr> ">" <r : Expr> => Box::new(Expr::Op(l, Opcode::GREATER, r)),
+    <l : Expr> "<" <r : Expr> => Box::new(Expr::Op(l, Opcode::LESS, r)),
+    <l : Expr> "==" <r : Expr> => Box::new(Expr::Op(l, Opcode::EQ, r)),
+    <l : Expr> "!=" <r : Expr> => Box::new(Expr::Op(l, Opcode::UNEQ, r)),
+    <l : Expr> "<=" <r : Expr> => Box::new(Expr::Op(l, Opcode::LEQ, r)),
+    <l : Expr> ">=" <r : Expr> => Box::new(Expr::Op(l, Opcode::GEQ, r)),
+
+    #[precedence(level = "6")]
+    "!" <r : Expr> => Box::new(Expr::Op(Box::new(Expr::Null), Opcode::NOT, r)),
+
+    #[precedence(level = "7")] #[assoc(side = "left")]
+    <l : Expr> "&&" <r : Expr> => Box::new(Expr::Op(l, Opcode::AND, r)),
+
+    #[precedence(level = "8")] #[assoc(side = "left")]
+    <l : Expr> "||" <r : Expr> => Box::new(Expr::Op(l, Opcode::OR, r)),
+};
