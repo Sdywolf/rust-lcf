@@ -7,7 +7,7 @@ pub mod kernel {
 
     // The same type variable names in a Type are considered the same ocurrence
     #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
-    enum Type {
+    pub enum Type {
         TyVar(String),
         TyApp(String, Vec<Type>)
     }
@@ -15,14 +15,14 @@ pub mod kernel {
     //     const BOOL_TY: Type = Type::TyApp(String::from("bool"), Vec::new());
     // }
     #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
-    enum Term {
+    pub enum Term {
         Var(String, Type),
         Const(String, Type),
         Comb(Box<Term>, Box<Term>),
         Abs(Box<Term>, Box<Term>)
     }
     #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
-    enum Thm {
+    pub enum Thm {
         Sequent(Vec<Term>, Term)
     }
     struct TyTable {
@@ -115,13 +115,13 @@ pub mod kernel {
         }
     }
     lazy_static! {
-        static ref BOOL_TY: Type = Type::TyApp("bool".to_string(), Vec::new());
-        static ref ATY: Type = Type::TyVar("A".to_string());
+        pub static ref BOOL_TY: Type = Type::TyApp("bool".to_string(), Vec::new());
+        pub static ref ATY: Type = Type::TyVar("A".to_string());
     }
-    fn bool_ty() -> Type {
+    pub fn bool_ty() -> Type {
         BOOL_TY.clone()
     }
-    fn aty() -> Type {
+    pub fn aty() -> Type {
         ATY.clone()
     }
     struct TermTable {
@@ -520,11 +520,11 @@ pub mod kernel {
 
     /// Primitives for equalities:
     
-    fn REFL(t: &Term) -> Thm {
+    pub fn refl(t: &Term) -> Thm {
         Thm::Sequent(vec![], safe_make_eq(t, t))
     }
 
-    fn TRANS(t1: &Thm, t2: &Thm) -> Thm{
+    pub fn trans(t1: &Thm, t2: &Thm) -> Thm{
         let (hyps1, conc1) = dest_thm(t1);
         let (hyps2, conc2) = dest_thm(t2);
         let (l1, _) = dest_eq(&conc1);
@@ -532,7 +532,7 @@ pub mod kernel {
         Thm::Sequent(term_union(&hyps1, &hyps2) , safe_make_eq(&l1, &r2))
     }
 
-    fn MK_COMB(l: &Thm, r: &Thm) -> Thm {
+    pub fn mkComb(l: &Thm, r: &Thm) -> Thm {
         let (hyps1, conc1) = dest_thm(l);
         let (hyps2, conc2) = dest_thm(r);
         let (l1, r1) = dest_eq(&conc1);
@@ -540,7 +540,7 @@ pub mod kernel {
         Thm::Sequent(term_union(&hyps1, &hyps2), safe_make_eq(&make_comb(&l1, &l2), &make_comb(&r1, &r2)))
     }
 
-    fn ABS(v: &Term, t: &Thm) -> Thm {
+    pub fn abs(v: &Term, t: &Thm) -> Thm {
         match v {
             Term::Var(name, _) => {
                 let (hyps, conc) = dest_thm(t);
@@ -558,7 +558,7 @@ pub mod kernel {
 
     /// Primitives for lambda calculus:
     
-    fn BETA(t: &Term, v: &Term) -> Thm {
+    pub fn beta(t: &Term, v: &Term) -> Thm {
         match t {
             Term::Abs(v0, t0) => {
                 if v0.as_ref() == v {
@@ -574,12 +574,12 @@ pub mod kernel {
     /// Primitives for deduction:
     
     /// ASSUME: add a proposition to the hypotheses
-    fn ASSUME(t: &Term) -> Thm {
+    pub fn assume(t: &Term) -> Thm {
         if type_of(t) == *BOOL_TY {Thm::Sequent(vec![t.clone()], t.clone())}
         else {panic!("ASSUME: not a proposition")}
     }
     /// EQ_MP: modus ponens for equalities
-    fn EQ_MP(t1: &Thm, t2: &Thm) -> Thm {
+    pub fn eq_mp(t1: &Thm, t2: &Thm) -> Thm {
         let (hyps1, conc1) = dest_thm(t1);
         let (hyps2, conc2) = dest_thm(t2);
         let (l1, r1) = dest_eq(&conc1);
@@ -591,7 +591,7 @@ pub mod kernel {
     }
 
     /// DEDUCT_ANTISYM_RULE: if conc1 and conc2 can imply each other, then they are equal
-    fn DEDUCT_ANTYSYM_RULE(t1: &Thm, t2: &Thm) -> Thm {
+    pub fn deduct_antysym_rule(t1: &Thm, t2: &Thm) -> Thm {
         let (hyps1, conc1) = dest_thm(t1);
         let (hyps2, conc2) = dest_thm(t2);
         Thm::Sequent(term_union(&term_remove(&conc2, &hyps1), &term_remove(&conc1, &hyps2)), 
@@ -599,7 +599,7 @@ pub mod kernel {
     }
 
     /// INST_TYPE: instantiate type variables in a theorem
-    fn INST_TYPE(m: &HashMap<String, Type>, t: &Thm) -> Thm {
+    pub fn inst_type(m: &HashMap<String, Type>, t: &Thm) -> Thm {
         fn term_inst_type_map(m: &HashMap<String, Type>, ts: &Vec<Term>) -> Vec<Term> {
             ts.iter().map(|x| inst_term_type(x, m)).collect()
         }
@@ -611,7 +611,7 @@ pub mod kernel {
     }
 
     /// INST: instantiate variables in a theorem
-    fn INST(m: &HashMap<String, Term>, t: &Thm) -> Thm {
+    pub fn inst(m: &HashMap<String, Term>, t: &Thm) -> Thm {
         fn term_inst_map(m: &HashMap<String, Term>, ts: &Vec<Term>) -> Vec<Term> {
             ts.iter().map(|x| var_subst(x, &mut m.clone())).collect()
         }
