@@ -1,10 +1,12 @@
 use std::io;
 mod kernel;
 mod utils;
-use utils::parser::get_token;
-use utils::ast::{Sentence, Var, Ident};
+use utils::parser::{self, get_token};
+use utils::ast::{Var, Func};
 
 static mut VAR_TABLE : Vec<Var> = Vec::new();
+static mut FUNC_TABLE : Vec<Func> = Vec::new();
+
 
 mod example {
     use super::kernel::kernel::{refl, trans, mkComb, abs, beta, assume, eq_mp, deduct_antysym_rule, inst_type, inst};
@@ -97,6 +99,7 @@ mod example {
         println!("{}", abs.prim_apply());
     }
 
+    // BETA `(a:A . ((x:A. x:A) a:A))` `a:A`;;
     pub fn example3() {
         let f = Term::Abs(Box::new(Term::Var("x".to_string(), aty())), Box::new(Term::Var("x".to_string(), aty())));
         let a = Term::Var("a".to_string(), aty());
@@ -104,7 +107,11 @@ mod example {
         let b = Term::Var("a".to_string(), aty());
         let abs = Term::Abs(Box::new(b.clone()), Box::new(comb.clone()));
         let c = Term::Var("a".to_string(), aty());
+
+        println!("{}", abs.clone());
+        println!("{}", c.clone());
         let beta = Prim::Beta(abs, c);
+        
         println!("{}", beta.prim_apply());
     }
 }
@@ -113,6 +120,8 @@ fn main() {
     example::example1();
     example::example2();
     example::example3();
+
+    parser::get_token();
     
     // loop{
     //     let input = get_token();
