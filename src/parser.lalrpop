@@ -1,6 +1,9 @@
 use std::str::FromStr;
-use crate::ast::{Expr, Opcode, Constant, Sentence, Ident};
-use crate::VAR_TABLE;
+use crate::utils::ast::{Expr, Opcode, Constant, Sentence, Ident, IdentList, IdentListNext, ArgList, ArgListNext};
+use crate::utils::ast::{PrimLaw, Prim, TypeListConstructor, TypeListNext, TermListConstructor, TermListNext};
+use crate::kernel::kernel::{Term, Type, aty, bool_ty, safe_make_eq};
+use std::collections::HashMap;
+use crate::PRIM_TABLE;
 
 grammar;
 
@@ -16,6 +19,37 @@ pub Stmt : Sentence = {
 Stmt_inside : Sentence = {
     Expr => Sentence::Assignment(Ident::Null, <>),
     "let" <id : Id> "=" <expr : Expr> => Sentence::Assignment(Ident::Name(id.to_string()), expr),
+
+    "let" <func_id : Id> "(" <idlist : IdentListCstr> ")" "=" <body : Expr> => {
+        let mut argtable : Vec<String> = Vec::new();
+        let mut iter = idlist;
+        
+        loop {
+            argtable.push(iter.inside);
+            if let IdentListNext::Cont(nxt) = iter.next {
+                iter = nxt;
+            }
+            else {
+                break;
+            }
+        }
+        Sentence::FuncDef(func_id, argtable, body)
+    },
+
+    "p" <prim : Primitive> => Sentence::Primitive(prim),
+
+    "p" "let" <id : Id> "=" <prim : Primitive> => Sentence::PrimitiveAssignment(prim, id),
+};
+
+IdentListCstr : Box<IdentList> = {
+    Id => Box::new(IdentList{
+        inside : <>,
+        next : IdentListNext::Null,
+    }),
+    <id : Id> "," <nxt : IdentListCstr> => Box::new(IdentList{
+        inside : id,
+        next : IdentListNext::Cont(nxt),
+    }),
 };
 
 Id : String = {
@@ -23,7 +57,6 @@ Id : String = {
 };
 
 Constant : Constant = {
-    r"`[^`]*`" => Constant::Term(<>.to_string()),
     r"[-]?[0-9]+" => Constant::IntConst(i32::from_str(<>).unwrap()),
     r"'[^']*'" => Constant::StrConst(<>.to_string()),
     "true" => Constant::BoolConst(true),
@@ -31,42 +64,38 @@ Constant : Constant = {
 };
 
 Term : Box<Expr> = {
-    <id : Id> => {
-        let mut cnt = 0;
-        unsafe {
-            while cnt < VAR_TABLE.len() {
-                if VAR_TABLE[cnt].name == id {
-                    break;
-                }
-                cnt = cnt + 1;
-            }
-            if cnt == VAR_TABLE.len() {
-                panic!("No variable named {} is found.", id);
-            }
-            Box::new(Expr::Const(VAR_TABLE[cnt].value.clone()))
-        }
-    },
+    <id : Id> => Box::new(Expr::Id(id)),
     Constant => Box::new(Expr::Const(<>)),
     "(" <expr : Expr> ")" => expr,
+
+    <func_id : Id> "(" <args : ArgList> ")" => {
+        let mut res : Vec<Box<Expr> > = Vec::new();
+        let mut iter = args;
+        loop {
+            res.push(iter.inside);
+            if let ArgListNext::Cont(nxt) = iter.next {
+                iter = nxt;
+            }
+            else {
+                break;
+            }
+        }
+        Box::new(Expr::Func( func_id, res ))
+    },
 };
 
-Primitive : Box<Expr> = {
-    "REFL" <r : Term> => Box::new(Expr::Op(Box::new(Expr::Null), Opcode::REFL, r)),
-    "TRANS" <l : Term> <r : Term> => Box::new(Expr::Op(l, Opcode::TRANS, r)),
-    "MK_COMB" <l : Term> <r : Term> => Box::new(Expr::Op(l, Opcode::MK_COMB, r)),
-    "ABS" <l : Term> <r : Term> => Box::new(Expr::Op(l, Opcode::ABS, r)),
-    "BETA" <r : Term> => Box::new(Expr::Op(Box::new(Expr::Null), Opcode::BETA, r)),
-    "ASSUME" <r : Term> => Box::new(Expr::Op(Box::new(Expr::Null), Opcode::ASSUME, r)),
-    "EQ_MP" <l : Term> <r : Term> => Box::new(Expr::Op(l, Opcode::EQ_MP, r)),
-    "DEDUCT_ANTYSYM_RULE" <l : Term> <r : Term> => Box::new(Expr::Op(l, Opcode::DEDUCT_ANTYSYM_RULE, r)),
-    "INST_TYPE" <l : Term> <r : Term> => Box::new(Expr::Op(l, Opcode::INST_TYPE, r)),
-    "INST" <l : Term> <r : Term> => Box::new(Expr::Op(l, Opcode::INST, r)),
+ArgList : Box<ArgList> = {
+    Expr => Box::new(ArgList{ 
+        inside : <>, 
+        next : ArgListNext::Null,
+    }),
+    <expr : Expr> "," <arglist : ArgList> => Box::new(ArgList { 
+        inside : expr, 
+        next : ArgListNext::Cont(arglist),
+    }),
 };
 
 Expr : Box<Expr> = {
-    #[precedence(level = "0")]
-    Primitive,
-
     #[precedence(level = "1")] 
     Term,
 
@@ -97,4 +126,162 @@ Expr : Box<Expr> = {
 
     #[precedence(level = "8")] #[assoc(side = "left")]
     <l : Expr> "||" <r : Expr> => Box::new(Expr::Op(l, Opcode::OR, r)),
+};
+
+Primitive : Box<Prim> = {
+    "REFL" <arg1 : Primitive> => Box::new(Prim::PrimNode(
+        PrimLaw::REFL, 
+        arg1, 
+        Box::new(Prim::Null)
+    )),
+    "TRANS" <arg1 : Primitive> <arg2 : Primitive> => Box::new(Prim::PrimNode(
+        PrimLaw::TRANS,
+        arg1, 
+        arg2,
+    )),
+    "MK_COMB" <arg1 : Primitive> <arg2 : Primitive> => Box::new(Prim::PrimNode(
+        PrimLaw::MK_COMB,
+        arg1, 
+        arg2,
+    )),
+    "ABS" <arg1 : Primitive> <arg2 : Primitive> => Box::new(Prim::PrimNode(
+        PrimLaw::ABS,
+        arg1, 
+        arg2,
+    )),
+    "BETA" <arg1 : Primitive> <arg2 : Primitive> => Box::new(Prim::PrimNode(
+        PrimLaw::BETA,
+        arg1,
+        arg2,
+    )),
+    "ASSUME" <arg1 : Primitive> => Box::new(Prim::PrimNode(
+        PrimLaw::ASSUME,
+        arg1, 
+        Box::new(Prim::Null),
+    )),
+    "EQ_MP" <arg1 : Primitive> <arg2 : Primitive> => Box::new(Prim::PrimNode(
+        PrimLaw::EQ_MP,
+        arg1,
+        arg2,
+    )),
+    "DEDUCT_ANTYSYM_RULE" <arg1 : Primitive> <arg2 : Primitive> => Box::new(Prim::PrimNode(
+        PrimLaw::DEDUCT_ANTYSYM_RULE,
+        arg1,
+        arg2,
+    )),
+    "INST_TYPE" <arg1 : Primitive> <arg2 : Primitive> => Box::new(Prim::PrimNode(
+        PrimLaw::INST_TYPE,
+        arg1,
+        arg2,
+    )),
+    "INST" <arg1 : Primitive> <arg2 : Primitive> => Box::new(Prim::PrimNode(
+        PrimLaw::INST,
+        arg1, 
+        arg2,
+    )),
+
+    "(" <prim : Primitive> ")" => prim,
+    PackagedTerm => Box::new(Prim::PrimTerm(<>)),
+    Id => {
+        unsafe {
+            let prim = PRIM_TABLE.get(&<>);
+            match prim {
+                Some(pr) => pr.clone(),
+                None => {
+                    panic!("There isn't any primitive or term named {}.", <>);
+                },
+            }
+        }
+    },
+    "[" <tl : TypeList> "]" => {
+        let mut hm = HashMap::new();
+        let mut iter = tl;
+        loop {
+            hm.insert(iter.str, iter.tp);
+            if let TypeListNext::Cont(nxt) = iter.next {
+                iter = nxt;
+            }
+            else {
+                break;
+            }
+        }
+        Box::new(Prim::TypeList(hm))
+    },
+    "[" <tl : TermList> "]" => {
+        let mut hm = HashMap::new();
+        let mut iter = tl;
+        loop {
+            hm.insert(iter.str, iter.tm);
+            if let TermListNext::Cont(nxt) = iter.next {
+                iter = nxt;
+            }
+            else {
+                break;
+            }
+        }
+        Box::new(Prim::TermList(hm))
+    },
+};
+
+TypeList : Box<TypeListConstructor> = {
+    <id : Id> "," <tp : PackagedType> => Box::new(TypeListConstructor{
+        str : id,
+        tp,
+        next : TypeListNext::Null,
+}),
+
+    <id : Id> "," <tp : PackagedType> ";" <tplist : TypeList> => Box::new(TypeListConstructor{
+        str : id,
+        tp,
+        next : TypeListNext::Cont(tplist),
+}),
+}; // [a, `:A`; b, `:bool`]
+
+TermList : Box<TermListConstructor> = {
+    <id : Id> "," <tm : PackagedTerm> => Box::new(TermListConstructor{
+        str : id,
+        tm,
+        next : TermListNext::Null,
+    }),
+
+    <id : Id> "," <tm : PackagedTerm> ";" <tmlist : TermList> => Box::new(TermListConstructor{
+        str : id,
+        tm,
+        next : TermListNext::Cont(tmlist),
+    }),
+}; // [a, `a : A`; b, `(a = a)`]
+
+PackagedTerm : Term = {
+    "`" <primterm : PrimTerm> "`" => primterm,
+};
+
+PrimTerm : Term = {
+    <id : Id> => {
+        unsafe {
+            let prim = PRIM_TABLE.get(&<>);
+            match prim {
+                Some(pr) => pr.to_term().clone(),
+                None => {
+                    panic!("There isn't any primitive or term named {}.", <>);
+                },
+            }
+        }
+    },
+    <id : Id> ":" <tp : PrimType> => Term::Var(id, tp),
+    // "=" ":" <tp : PrimType> => Term::Var("=".to_string(), tp),
+    "("<term1 : PrimTerm> <term2 : PrimTerm> ")" => Term::Comb(Box::new(term1), Box::new(term2)),
+    "(" <term1 : PrimTerm> "." <term2 : PrimTerm> ")" => Term::Abs(Box::new(term1), Box::new(term2)),
+    "(" <term : PrimTerm> ")" => term,
+    "("<l : PrimTerm> "=" <r : PrimTerm>")" => safe_make_eq(&l, &r),
+};
+
+PackagedType : Type = {
+    "`" ":" <tp : PrimType> "`" => tp,
+};
+
+PrimType : Type = {
+    "A" => aty(),
+    "bool" => bool_ty(),
+    "(" <type1 : PrimType> "->" <type2 : PrimType> ")" => Type::TyApp("fun".to_string(), vec![type1, type2]),
+    "(" <type1 : PrimType> ")" => type1,
 };

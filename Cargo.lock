@@ -381,6 +381,7 @@ dependencies = [
  "lalrpop",
  "lalrpop-util",
  "lazy_static",
+ "once_cell",
 ]
 
 [[package]]
