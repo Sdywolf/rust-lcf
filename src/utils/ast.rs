@@ -320,6 +320,7 @@ impl Clone for Opcode {
 }
 
 // primitives
+#[derive(Copy)]
 pub enum PrimLaw {
     REFL, // term -> thm
     TRANS, // thm -> thm -> thm
@@ -332,18 +333,25 @@ pub enum PrimLaw {
     INST_TYPE, // (hol_type * hol_type) list -> thm -> thm
     INST, // (term * term) list -> thm -> thm
 }
+impl Clone for PrimLaw {
+    fn clone(&self) -> PrimLaw {
+        *self
+    }
+}
 
+#[derive(Clone)]
 pub enum Prim {
     PrimTerm(Term),
     TypeList(HashMap<String, Type>),
     TermList(HashMap<String, Term>),
     PrimNode(PrimLaw, Box<Prim>, Box<Prim>),
+    PrimThm(Thm),
     Null,
 }
 impl Prim{
     pub fn to_term(&self) -> &Term {
         match &self {
-            Prim::PrimTerm(tm) => { println!("{}", tm); tm},
+            Prim::PrimTerm(tm) => tm,
             _ => {
                 panic!("This is not a term!");
             },
@@ -370,6 +378,7 @@ impl Prim{
 
     pub fn apply(&self) -> Thm {
         match &self {
+            Prim::PrimThm(thm) => thm.clone(),
             Prim::PrimNode(law, p1, p2) => {
                 match *law {
                     PrimLaw::REFL => refl(p1.to_term()),
@@ -385,6 +394,25 @@ impl Prim{
                 }
             },
             _ => { panic!("This is not a primitive."); },
+        }
+    }
+
+    pub fn print(&self, id : String) -> Box<Prim> {
+        match &self {
+            Prim::PrimTerm(tm) => {
+                println!("var {} : term = {}", id, tm);
+                Box::new(Prim::PrimTerm(tm.clone()))
+            },
+            Prim::PrimThm(thm) => {
+                println!("var {} : thm = {}", id, thm);
+                Box::new(Prim::PrimThm(thm.clone()))
+            },
+            Prim::PrimNode(law, p1, p2) => {
+                let res = self.apply();
+                println!("var {} : thm = {}", id, res);
+                Box::new(Prim::PrimThm(res))
+            },
+            _ => { println!("This type cannot be printed!"); Box::new(self.clone()) }
         }
     }
 }
@@ -415,6 +443,7 @@ pub enum Sentence {
     Assignment(Ident, Box<Expr>),
     FuncDef(String, Vec<String>, Box<Expr>),
     Primitive(Box<Prim>),
+    PrimitiveAssignment(Box<Prim>, String),
 }
 
 pub enum Ident {

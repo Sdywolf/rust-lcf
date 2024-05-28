@@ -2,6 +2,7 @@ use lalrpop_util::lalrpop_mod;
 use std::io;
 use crate::VAR_TABLE;
 use crate::FUNC_TABLE;
+use crate::PRIM_TABLE;
 use crate::utils::ast::{Sentence, Var, Ident, Func};
 
 lalrpop_mod!(parser);
@@ -16,7 +17,14 @@ pub fn get_token() -> Sentence{
 
         match &res {
             Sentence::Primitive(prim) => {
-                println!("{}", prim.apply());
+                prim.print("it".to_string());
+            },
+
+            Sentence::PrimitiveAssignment(prim, id) => {
+                let res = prim.print(id.to_string());
+                unsafe {
+                    PRIM_TABLE.insert(id.to_string(), res);
+                }
             },
             
             Sentence::FuncDef(func_id, arg_table, body) => {

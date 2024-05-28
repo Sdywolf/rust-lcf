@@ -461,7 +461,7 @@ pub mod kernel {
     /// Make a term representing the equality of two terms;
     /// type of "=" must be curried;
     /// the result term is Comb(Comb((=, TyApp(fun, [ty, Tyapp(fun, [ty, bool])])), l), r)
-    fn safe_make_eq(l: &Term, r: &Term) -> Term {
+    pub fn safe_make_eq(l: &Term, r: &Term) -> Term {
         let ty = type_of(l);
         Term::Comb(
             Box::new(
