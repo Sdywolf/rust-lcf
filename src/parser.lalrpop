@@ -1,8 +1,9 @@
 use std::str::FromStr;
 use crate::utils::ast::{Expr, Opcode, Constant, Sentence, Ident, IdentList, IdentListNext, ArgList, ArgListNext};
 use crate::utils::ast::{PrimLaw, Prim, TypeListConstructor, TypeListNext, TermListConstructor, TermListNext};
-use crate::kernel::kernel::{Term, Type, aty, bool_ty};
+use crate::kernel::kernel::{Term, Type, aty, bool_ty, safe_make_eq};
 use std::collections::HashMap;
+use crate::PRIM_TABLE;
 
 grammar;
 
@@ -35,7 +36,9 @@ Stmt_inside : Sentence = {
         Sentence::FuncDef(func_id, argtable, body)
     },
 
-    Primitive => Sentence::Primitive(<>),
+    "p" <prim : Primitive> => Sentence::Primitive(prim),
+
+    "p" "let" <id : Id> "=" <prim : Primitive> => Sentence::PrimitiveAssignment(prim, id),
 };
 
 IdentListCstr : Box<IdentList> = {
@@ -179,6 +182,17 @@ Primitive : Box<Prim> = {
 
     "(" <prim : Primitive> ")" => prim,
     PackagedTerm => Box::new(Prim::PrimTerm(<>)),
+    Id => {
+        unsafe {
+            let prim = PRIM_TABLE.get(&<>);
+            match prim {
+                Some(pr) => pr.clone(),
+                None => {
+                    panic!("There isn't any primitive or term named {}.", <>);
+                },
+            }
+        }
+    },
     "[" <tl : TypeList> "]" => {
         let mut hm = HashMap::new();
         let mut iter = tl;
@@ -221,7 +235,7 @@ TypeList : Box<TypeListConstructor> = {
         tp,
         next : TypeListNext::Cont(tplist),
 }),
-};
+}; // [a, `:A`; b, `:bool`]
 
 TermList : Box<TermListConstructor> = {
     <id : Id> "," <tm : PackagedTerm> => Box::new(TermListConstructor{
@@ -235,17 +249,30 @@ TermList : Box<TermListConstructor> = {
         tm,
         next : TermListNext::Cont(tmlist),
     }),
-};
+}; // [a, `a : A`; b, `(a = a)`]
 
 PackagedTerm : Term = {
     "`" <primterm : PrimTerm> "`" => primterm,
 };
 
 PrimTerm : Term = {
+    <id : Id> => {
+        unsafe {
+            let prim = PRIM_TABLE.get(&<>);
+            match prim {
+                Some(pr) => pr.to_term().clone(),
+                None => {
+                    panic!("There isn't any primitive or term named {}.", <>);
+                },
+            }
+        }
+    },
     <id : Id> ":" <tp : PrimType> => Term::Var(id, tp),
+    // "=" ":" <tp : PrimType> => Term::Var("=".to_string(), tp),
     "("<term1 : PrimTerm> <term2 : PrimTerm> ")" => Term::Comb(Box::new(term1), Box::new(term2)),
     "(" <term1 : PrimTerm> "." <term2 : PrimTerm> ")" => Term::Abs(Box::new(term1), Box::new(term2)),
     "(" <term : PrimTerm> ")" => term,
+    "("<l : PrimTerm> "=" <r : PrimTerm>")" => safe_make_eq(&l, &r),
 };
 
 PackagedType : Type = {

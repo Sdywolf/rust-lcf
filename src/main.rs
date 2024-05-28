@@ -1,12 +1,13 @@
-use std::io;
 mod kernel;
 mod utils;
 use utils::parser::{self, get_token};
-use utils::ast::{Var, Func};
+use utils::ast::{Var, Func, Prim};
+use std::collections::HashMap;
+use once_cell::sync::Lazy;
 
 static mut VAR_TABLE : Vec<Var> = Vec::new();
 static mut FUNC_TABLE : Vec<Func> = Vec::new();
-
+static mut PRIM_TABLE : Lazy<HashMap<String, Box<Prim>>> = Lazy::new(||HashMap::new());
 
 mod example {
     use super::kernel::kernel::{refl, trans, mkComb, abs, beta, assume, eq_mp, deduct_antysym_rule, inst_type, inst};
@@ -117,13 +118,9 @@ mod example {
 }
 
 fn main() {
-    example::example1();
-    example::example2();
-    example::example3();
+    // example::example1();
+    // example::example2();
+    // example::example3();
 
     parser::get_token();
-    
-    // loop{
-    //     let input = get_token();
-    // }
 }
