@@ -114,12 +114,17 @@ pub mod kernel {
                 Type::TyApp(op.clone(), args.iter().map(|x| type_subst(m, x)).collect())
         }
     }
+
     lazy_static! {
         pub static ref BOOL_TY: Type = Type::TyApp("bool".to_string(), Vec::new());
+        pub static ref IND_TY: Type = Type::TyApp("ind".to_string(), Vec::new());
         pub static ref ATY: Type = Type::TyVar("A".to_string());
     }
     pub fn bool_ty() -> Type {
         BOOL_TY.clone()
+    }
+    pub fn ind_ty() -> Type {
+        IND_TY.clone()
     }
     pub fn aty() -> Type {
         ATY.clone()
@@ -631,4 +636,43 @@ pub mod kernel {
     //         panic!("AXIOM: not a proposition")
     //     }
     // }
+
+    /// Primitives for math:
+     
+    fn occurs_in(t: &Term, u: &Term) -> bool {
+        match t {
+            Term::Var(_, _) => {
+                match u {
+                    Term::Var(_, _) => t == u,
+                    Term::Const(_, _) => false,
+                    Term::Comb(f, x) => occurs_in(t, f) || occurs_in(t, x),
+                    Term::Abs(v, t1) => occurs_in(t, v) || occurs_in(t, t1)
+                }
+            },
+            _ => panic!("occurs_in: not a variable")
+        }
+    }
+
+    /// EXTENSIONALITY: forall f. (\x. f x) = f.
+    pub fn extensionality(f: &Term, v: &Term) -> Thm {
+        match f {
+            Term::Abs(v1, t) => {
+                match v {
+                    Term::Var(name, _) => {
+                        if occurs_in(v, f) {panic!("EXTENSIONALITY: variable occurs in abstraction")}
+                        let l = make_abs(v, &make_comb(f, v));
+                        let r = f;
+                        Thm::Sequent(vec![], safe_make_eq(&l, r))
+                    },
+                    _ => panic!("EXTENSIONALITY: not a variable")
+                }
+            },
+            _ => panic!("EXTENSIONALITY: not an abstraction")
+        }
+    }
+
+    // / Infinity: exists f: ind -> ind. (ONE_ONE f) /\ ~(ONTO f).
+    // pub fn infinity() -> (Term, Thm) {
+
+    // }    
 }

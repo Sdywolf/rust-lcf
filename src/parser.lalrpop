@@ -1,7 +1,7 @@
 use std::str::FromStr;
 use crate::utils::ast::{Expr, Opcode, Constant, Sentence, Ident, IdentList, IdentListNext, ArgList, ArgListNext};
 use crate::utils::ast::{PrimLaw, Prim, TypeListConstructor, TypeListNext, TermListConstructor, TermListNext};
-use crate::kernel::kernel::{Term, Type, aty, bool_ty, safe_make_eq};
+use crate::kernel::kernel::{Term, Type, aty, bool_ty, ind_ty, safe_make_eq};
 use std::collections::HashMap;
 use crate::PRIM_TABLE;
 
@@ -280,8 +280,9 @@ PackagedType : Type = {
 };
 
 PrimType : Type = {
-    "A" => aty(),
     "bool" => bool_ty(),
+    "ind" => ind_ty(),
+    <id : Id> => Type::TyVar(id.to_string()),
     "(" <type1 : PrimType> "->" <type2 : PrimType> ")" => Type::TyApp("fun".to_string(), vec![type1, type2]),
     "(" <type1 : PrimType> ")" => type1,
 };
