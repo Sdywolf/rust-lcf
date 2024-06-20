@@ -179,6 +179,11 @@ Primitive : Box<Prim> = {
         arg1, 
         arg2,
     )),
+    "EXTENSIONALITY" <arg1 : Primitive> <arg2 : Primitive> => Box::new(Prim::PrimNode(
+        PrimLaw::EXTENSIONALITY,
+        arg1,
+        arg2,
+    )),
 
     "(" <prim : Primitive> ")" => prim,
     PackagedTerm => Box::new(Prim::PrimTerm(<>)),

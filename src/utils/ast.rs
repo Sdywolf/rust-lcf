@@ -6,7 +6,7 @@ use crate::kernel::kernel::mkComb;
 use std::collections::HashMap;
 use crate::VAR_TABLE;
 use crate::FUNC_TABLE;
-use crate::kernel::kernel::{Type, Term, refl, trans, abs, inst, beta, Thm};
+use crate::kernel::kernel::{Type, Term, refl, trans, abs, inst, beta, extensionality, Thm};
 
 #[derive(Clone, PartialEq, Eq)]
 pub enum Constant {
@@ -332,6 +332,7 @@ pub enum PrimLaw {
     DEDUCT_ANTYSYM_RULE, // thm -> thm -> thm
     INST_TYPE, // (hol_type * hol_type) list -> thm -> thm
     INST, // (term * term) list -> thm -> thm
+    EXTENSIONALITY, // term -> term -> thm
 }
 impl Clone for PrimLaw {
     fn clone(&self) -> PrimLaw {
@@ -391,6 +392,7 @@ impl Prim{
                     PrimLaw::DEDUCT_ANTYSYM_RULE => deduct_antysym_rule(&p1.apply(), &p2.apply()),
                     PrimLaw::INST => inst(p1.to_termlist(), &p2.apply()),
                     PrimLaw::INST_TYPE => inst_type(p1.to_typelist(), &p2.apply()),
+                    PrimLaw::EXTENSIONALITY => extensionality(p1.to_term(), p2.to_term()),
                 }
             },
             _ => { panic!("This is not a primitive."); },
